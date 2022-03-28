@@ -28,6 +28,7 @@ bls_public_addresses = []
 coll_txids = []
 ip_addresses = []
 final_txids = []
+instance_ids = []
 
 ssh = paramiko.SSHClient()
 ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
@@ -156,6 +157,7 @@ for i in range(nodes):
     response.reload()
     ip_addr = response.public_ip_address
     ip_addresses.append(ip_addr)
+    instance_ids.append(response.instance_id)
 
 # #protx register_prepare collateralHash collateralIndex ipAndPort ownerKeyAddr operatorPubKey votingKeyAddr operatorReward payoutAddress (feeSourceAddress)
 
@@ -194,4 +196,6 @@ with open('debug.log', 'w') as file:
     for i in ip_addresses:
         file.write("%s\n" % i)
     for i in final_txids:
+        file.write("%s\n" % i)
+    for i in instance_ids:
         file.write("%s\n" % i)
