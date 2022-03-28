@@ -6,7 +6,7 @@ import boto3
 
 #This script assumes you already have a network running...
 #Step 1: Create image of existing masternode created by dash-network-deploy
-#Step 2: Put the image ID in below and fill the rest (L15-21)
+#Step 2: Put the image ID in below and fill the rest (L15-23)
 #Step 3: Create a dynamodb table in AWS called 'devnet' - eg simply 'vanaheim' or 'malort'
 #Step 4: Ensure you have an IAM role for dashdev on AWS under 'default' in ~/.aws/credentials
 #Step 5: Ensure an IAM role exists called devnet-masternode (eg malort-masternode) with read/write to dynamo and read access to EC2 (at least itself)
@@ -19,6 +19,8 @@ dashd_premine_server = '54.203.97.105' #also called dashd-wallet-1
 payee = 'yaxpG7hBNgBE3LwRzgjP3DVZfSDj1XJ9Fm' #not used at the moment
 nodes = 2 #how many masternodes need setting up
 startkey = 0 #Set up to last deployment, for example if you've already deployed 5 using this script set this to 5.
+subnet_id = 'subnet-07f340b252323b3f4' #Get this from AWS, it's generally going to be where your devnet is
+SGIDs = ['sg-07fd40822dd7f5ba3','sg-0050038afb32b3f05','sg-0af95842b67c96efd'] #Get these from an existing masternode
 
 collat_addresses = []
 voting_addresses = []
@@ -140,16 +142,12 @@ for i in range(nodes):
         Monitoring={
             'Enabled': False
         },
-        SecurityGroupIds=[
-            'sg-07fd40822dd7f5ba3',
-            'sg-0050038afb32b3f05',
-            'sg-0af95842b67c96efd'
-        ],
+        SecurityGroupIds=SGIDs,
         IamInstanceProfile={
             'Name': '{}-masternode'.format(devnet)
         },
         UserData=open("init.sh").read(),
-        SubnetId='subnet-07f340b252323b3f4',
+        SubnetId=subnet_id,
         TagSpecifications=[{'ResourceType': 'instance',
                             'Tags': [tag_purpose_test]+[tag_purpose_name]+[tag_purpose_devnet]}])[0]
     
@@ -174,7 +172,6 @@ for i in range(nodes):
 
     #Really hacky way of getting what we want from the CLI/json because it comes to us weirdly through SSH (but it works!)
     tx = protx_output[1][9:-3]
-    #new_dash_address is our coll address
     signthismessage = protx_output[3][17:-1]
 
     ssh.connect(dashd_protx_server, username='ubuntu', key_filename='/home/monotoko/.ssh/evo-app-deploy.rsa')
