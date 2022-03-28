@@ -18,6 +18,7 @@ dashd_protx_server = '34.221.207.161' #also called dashd-wallet-2
 dashd_premine_server = '54.203.97.105' #also called dashd-wallet-1
 payee = 'yaxpG7hBNgBE3LwRzgjP3DVZfSDj1XJ9Fm' #not used at the moment
 nodes = 2 #how many masternodes need setting up
+startkey = 0 #Set up to last deployment, for example if you've already deployed 5 using this script set this to 5.
 
 collat_addresses = []
 voting_addresses = []
@@ -91,7 +92,7 @@ for i in range(nodes):
 
     #Dynamo!
     dynamodb = boto3.resource('dynamodb', region_name='us-west-2')
-    table = dynamodb.Table('vanaheim')
+    table = dynamodb.Table(devnet)
 
     respose = table.put_item(
         Item={
@@ -127,6 +128,8 @@ while block_count == new_block_count:
 for i in range(nodes):
     ec2 = boto3.resource('ec2', region_name='us-west-2')
     tag_purpose_test = {"Key": "address", "Value": collat_addresses[i]} #Don't add another tag here, it overwrites existing... as tempting as it is to add the NAME here
+    tag_purpose_name = {"Key": "Name", "Value": "devnet-{}-extra{}".format(devnet,i+startkey)}
+    tag_purpose_devnet = {"Key": "devnet", "Value": devnet}
     response = ec2.create_instances(
         ImageId=image_id,
         InstanceType='t3.medium',
@@ -142,12 +145,12 @@ for i in range(nodes):
             'sg-0af95842b67c96efd'
         ],
         IamInstanceProfile={
-            'Name': 'vanaheim-masternode'
+            'Name': '{}-masternode'.format(devnet)
         },
         UserData=open("init.sh").read(),
         SubnetId='subnet-07f340b252323b3f4',
         TagSpecifications=[{'ResourceType': 'instance',
-                            'Tags': [tag_purpose_test]}])[0]
+                            'Tags': [tag_purpose_test]+[tag_purpose_name]+[tag_purpose_devnet]}])[0]
     
     response.wait_until_running()
     response.reload()

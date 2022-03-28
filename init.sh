@@ -11,14 +11,15 @@ TAG_NAME="address"
 INSTANCE_ID="`wget -qO- http://169.254.169.254/latest/meta-data/instance-id`"
 REGION='us-west-2'
 TAG_VALUE="`aws ec2 describe-tags --filters "Name=resource-id,Values=$INSTANCE_ID" "Name=key,Values=$TAG_NAME" --region $REGION --output=text | cut -f5`"
+DEVNET="`aws ec2 describe-tags --filters "Name=resource-id,Values=$INSTANCE_ID" "Name=key,Values=devnet" --region $REGION --output=text | cut -f5`"
 
 #Get the BLSKEY for this node
-BLSKEY=$(aws dynamodb get-item --table-name vanaheim --key=' {"address": {"S":"'${TAG_VALUE}'"} } ' --attributes-to-get blssecret --region $REGION | jq -r '.[] | .[] | .S')
+BLSKEY=$(aws dynamodb get-item --table-name $DEVNET --key=' {"address": {"S":"'${TAG_VALUE}'"} } ' --attributes-to-get blssecret --region $REGION | jq -r '.[] | .[] | .S')
 sed -i "s/masternodeblsprivkey=.*/masternodeblsprivkey=$BLSKEY/g" /dash/.dashcore/dash.conf
 
 #what's my IP?
 IP=$(dig +short myip.opendns.com @resolver1.opendns.com)
 sed -i "s/externalip=.*/externalip=$IP/g" /dash/.dashcore/dash.conf
 
-rm -rf /dash/.dashcore/devnet-vanaheim
+rm -rf /dash/.dashcore/devnet-$DEVNET
 docker restart dashd
