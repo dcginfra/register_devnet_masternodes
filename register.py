@@ -11,11 +11,11 @@ import boto3
 #Step 4: Ensure you have an IAM role for dashdev on AWS under 'default' in ~/.aws/credentials
 #Step 5: Ensure an IAM role exists called devnet-masternode (eg malort-masternode) with read/write to dynamo and read access to EC2 (at least itself)
 
-image_id = 'ami-05bf636864923cd4c'
+image_id = 'ami-05bf636864923cd4c' #an existing image from a masternode on the network
 devnet = 'vanaheim'
 key_location = '/home/monotoko/.ssh/evo-app-deploy.rsa' #give full path, doesn't work with ~
-dashd_protx_server = '34.221.207.161'
-dashd_premine_server = '54.203.97.105'
+dashd_protx_server = '34.221.207.161' #also called dashd-wallet-2
+dashd_premine_server = '54.203.97.105' #also called dashd-wallet-1
 payee = 'yaxpG7hBNgBE3LwRzgjP3DVZfSDj1XJ9Fm' #not used at the moment
 nodes = 2 #how many masternodes need setting up
 
