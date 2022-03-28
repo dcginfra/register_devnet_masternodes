@@ -192,7 +192,7 @@ for i in range(nodes):
     final_txids.append(stdout.readlines()[0].strip())
 
 #Write the important stuff once complete....
-with open('debug.log', 'w') as file:
+with open('debug.log', 'a') as file:
     for i in ip_addresses:
         file.write("%s\n" % i)
     for i in final_txids:
