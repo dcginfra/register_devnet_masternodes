@@ -153,8 +153,7 @@ for i in range(nodes):
     
     response.wait_until_running()
     response.reload()
-    ip_addr = response.public_ip_address
-    ip_addresses.append(ip_addr)
+    ip_addresses.append(response.public_ip_address)
     instance_ids.append(response.instance_id)
 
 # #protx register_prepare collateralHash collateralIndex ipAndPort ownerKeyAddr operatorPubKey votingKeyAddr operatorReward payoutAddress (feeSourceAddress)
