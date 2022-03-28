@@ -19,3 +19,6 @@ sed -i "s/masternodeblsprivkey=.*/masternodeblsprivkey=$BLSKEY/g" /dash/.dashcor
 #what's my IP?
 IP=$(dig +short myip.opendns.com @resolver1.opendns.com)
 sed -i "s/externalip=.*/externalip=$IP/g" /dash/.dashcore/dash.conf
+
+rm -rf /dash/.dashcore/devnet-vanaheim
+docker restart dashd
