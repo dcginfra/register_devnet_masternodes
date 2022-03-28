@@ -164,7 +164,7 @@ for i in range(nodes):
     protx_command = 'sudo -i dash-cli protx register_prepare {} 1 {}:20001 {} {} {} 0 {}'.format(coll_txids[i], ip_addresses[i], voting_addresses[i], bls_public_addresses[i], voting_addresses[i], payout_addresses[i])
     print("DEBUG: "+protx_command)
 
-    ssh.connect(dashd_protx_server, username='ubuntu', key_filename='/home/monotoko/.ssh/evo-app-deploy.rsa')
+    ssh.connect(dashd_protx_server, username='ubuntu', key_filename=key_location)
     stdin, stdout, stderr = ssh.exec_command(protx_command)
     stdin.close()
     protx_output = stdout.readlines()
@@ -173,7 +173,7 @@ for i in range(nodes):
     tx = protx_output[1][9:-3]
     signthismessage = protx_output[3][17:-1]
 
-    ssh.connect(dashd_protx_server, username='ubuntu', key_filename='/home/monotoko/.ssh/evo-app-deploy.rsa')
+    ssh.connect(dashd_protx_server, username='ubuntu', key_filename=key_location)
     stdin, stdout, stderr = ssh.exec_command('sudo -i dash-cli signmessage {} {}'.format(collat_addresses[i], signthismessage))
     stdin.close()
 
@@ -181,7 +181,7 @@ for i in range(nodes):
     print(signed_output)
 
     #one last hurrah!
-    ssh.connect(dashd_protx_server, username='ubuntu', key_filename='/home/monotoko/.ssh/evo-app-deploy.rsa')
+    ssh.connect(dashd_protx_server, username='ubuntu', key_filename=key_location)
     stdin, stdout, stderr = ssh.exec_command('sudo -i dash-cli protx register_submit {} {}'.format(tx, signed_output))
     stdin.close()
 
