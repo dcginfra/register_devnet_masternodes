@@ -11,33 +11,25 @@ parser.add_argument('--prep','-p', help='prepare protx/collaterals but do not br
 parser.add_argument('--run','-r', help='finish previously prepped setup', action='store_true')
 args = parser.parse_args()
 
-#Don't ask...
-def arithmetic_progression(n, x):
-  return list(range(n, x + 1, n))
-
 # SIMPLY A PROOF OF CONCEPT
 
 #This script assumes you already have a network running...
 #Step 1: Create image of existing masternode created by dash-network-deploy
 #Step 2: Put the image ID in below and fill the rest (L15-23)
 #Step 3: Create a dynamodb table in AWS called 'devnet' - eg simply 'vanaheim' or 'malort'
-#Step 3.5: Create a FIFO SQS table with a blinding time of at least 2 hours (so masternodes can receive their addresses)
 #Step 4: Ensure you have an IAM role for dashdev on AWS under 'default' in ~/.aws/credentials
 #Step 5: Ensure an IAM role exists called devnet-masternode (eg malort-masternode) with read/write to dynamo, read access to EC2 (at least itself) and read access to SQS
 
-image_id = 'ami-05bf636864923cd4c' #an existing image from a masternode on the network
+image_id = 'ami-0bef245aaa59dbd8d' #an existing image from a masternode on the network
 devnet = 'vanaheim'
 key_location = '/home/monotoko/.ssh/evo-app-deploy.rsa' #give full path, doesn't work with ~
-dashd_protx_server = '34.221.207.161' #also called dashd-wallet-2
-dashd_premine_server = '54.203.97.105' #also called dashd-wallet-1
+dashd_protx_server = '52.32.6.238' #also called dashd-wallet-2
+dashd_premine_server = '18.236.182.15' #also called dashd-wallet-1
 payee = 'yaxpG7hBNgBE3LwRzgjP3DVZfSDj1XJ9Fm' #not used at the moment
-nodes = 2 #how many masternodes need setting up
+nodes = 5 #how many masternodes need setting up
 startkey = 0 #Set up to last deployment, for example if you've already deployed 5 using this script set this to 5.
-subnet_id = 'subnet-07f340b252323b3f4' #Get this from AWS, it's generally going to be where your devnet is
-SGIDs = ['sg-07fd40822dd7f5ba3','sg-0050038afb32b3f05','sg-0af95842b67c96efd'] #Get these from an existing masternode
-
-#Fun fun fun
-sqs_client = boto3.client("sqs", region_name='us-west-2')
+subnet_id = 'subnet-01466fe13091e6c35' #Get this from AWS, it's generally going to be where your devnet is
+SGIDs = ['sg-0dd5d6e63ddaafb77','sg-0d049d8938e785412','sg-0d1f88acf293b0c26'] #Get these from an existing masternode
 
 collat_addresses = []
 voting_addresses = []
@@ -51,6 +43,9 @@ instance_ids = []
 
 ssh = paramiko.SSHClient()
 ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+
+sshn = paramiko.SSHClient()
+sshn.set_missing_host_key_policy(paramiko.AutoAddPolicy())
 
 #Dynamo!
 dynamodb = boto3.resource('dynamodb', region_name='us-west-2')
@@ -68,12 +63,6 @@ if args.prep or args == []:
         #new_dash_address = stdout.readlines()[0].strip()
         collat_addresses.append(stdout.readlines()[0].strip())
         print(collat_addresses[i])
-
-        #Put the collateral address into SQS for the nodes to retreive later
-        msg_body='{}'.format(collat_addresses[i])
-        msg_attributes={ 'address': {'DataType': 'String','StringValue': 'address{}'.format(i)}}
-        response = sqs_client.send_message(QueueUrl='https://sqs.us-west-2.amazonaws.com/854439639386/vanaheim.fifo',MessageAttributes=msg_attributes,MessageBody=msg_body,MessageGroupId="main8"+str(i),MessageDeduplicationId="main8"+str(i))
-        print("DEBUG: Sent message")
 
         #do it again for a second address
         stdin, stdout, stderr = ssh.exec_command('sudo -i dash-cli getnewaddress')
@@ -210,11 +199,9 @@ if args.run or args == []:
         TagSpecifications=[{'ResourceType': 'instance',
                                 'Tags': [tag_purpose_devnet]}])
 
-    #Wait until last one is running...
-    response[-1].wait_until_running()
-
     #reload all
     for r in response:
+        r.wait_until_running()
         r.reload()
 
     for i in response:
@@ -249,6 +236,17 @@ if args.run or args == []:
 
         final_txids.append(stdout.readlines()[0].strip())
 
+        #Okay this is hacky even for me...
+        sshn.connect(ip_addresses[i], username='ubuntu', key_filename=key_location)
+        stdinn, stdoutn, stderrn = sshn.exec_command('sudo sed -i "s/masternodeblsprivkey=.*/masternodeblsprivkey='+bls_secret_addresses[i]+'/g" /dash/.dashcore/dash.conf')
+        stdinn.close()
+        stdinn, stdoutn, stderrn = sshn.exec_command('sudo docker restart dashd')
+        stdinn.close()
+        sshn.close()
+        print("Replaced blskey of node {}"+str(i))
+    #Delete prep log
+    if os.path.exists("prep.log"):
+        os.remove("prep.log")
     #Write the important stuff once complete....
     with open('debug.log', 'a') as file:
         for i in ip_addresses:

@@ -14,7 +14,8 @@ DEVNET="`aws ec2 describe-tags --filters "Name=resource-id,Values=$INSTANCE_ID" 
 
 #Get the BLSKEY for this node
 BLSKEY=$(aws dynamodb get-item --table-name $DEVNET --key=' {"address": {"S":"'${TAG_VALUE}'"} } ' --attributes-to-get blssecret --region $REGION | jq -r '.[] | .[] | .S')
-sed -i "s/masternodeblsprivkey=.*/masternodeblsprivkey=$BLSKEY/g" /dash/.dashcore/dash.conf
+#Done from the master python script instead for now....
+#sed -i "s/masternodeblsprivkey=.*/masternodeblsprivkey=$BLSKEY/g" /dash/.dashcore/dash.conf
 
 #what's my IP?
 IP=$(dig +short myip.opendns.com @resolver1.opendns.com)
