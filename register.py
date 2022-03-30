@@ -243,9 +243,10 @@ if args.run or args == []:
             stdinn, stdoutn, stderrn = sshn.exec_command('sudo docker restart dashd')
             stdinn.close()
             sshn.close()
-            print("Replaced blskey of node {}".format(i))
         except:
             print("Something went wrong connecting to node {}".format(i))
+        else:
+            print("Replaced blskey of node {}".format(i))
     #Delete prep log
     if os.path.exists("prep.log"):
         os.remove("prep.log")
