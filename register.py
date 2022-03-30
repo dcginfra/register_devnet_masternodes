@@ -20,16 +20,15 @@ args = parser.parse_args()
 #Step 4: Ensure you have an IAM role for dashdev on AWS under 'default' in ~/.aws/credentials
 #Step 5: Ensure an IAM role exists called devnet-masternode (eg malort-masternode) with read/write to dynamo, read access to EC2 (at least itself) and read access to SQS
 
-image_id = 'ami-0bef245aaa59dbd8d' #an existing image from a masternode on the network
-devnet = 'vanaheim'
+image_id = 'ami-0b7fc1b9847b6632e' #an existing image from a masternode on the network
+devnet = 'malort'
 key_location = '/home/monotoko/.ssh/evo-app-deploy.rsa' #give full path, doesn't work with ~
-dashd_protx_server = '52.32.6.238' #also called dashd-wallet-2
-dashd_premine_server = '18.236.182.15' #also called dashd-wallet-1
-payee = 'yaxpG7hBNgBE3LwRzgjP3DVZfSDj1XJ9Fm' #not used at the moment
-nodes = 5 #how many masternodes need setting up
+dashd_protx_server = '54.148.235.29' #also called dashd-wallet-2
+dashd_premine_server = '54.186.71.19' #also called dashd-wallet-1
+nodes = 600 #how many masternodes need setting up
 startkey = 0 #Set up to last deployment, for example if you've already deployed 5 using this script set this to 5.
-subnet_id = 'subnet-01466fe13091e6c35' #Get this from AWS, it's generally going to be where your devnet is
-SGIDs = ['sg-0dd5d6e63ddaafb77','sg-0d049d8938e785412','sg-0d1f88acf293b0c26'] #Get these from an existing masternode
+subnet_id = 'subnet-03a1d16d171df3219' #Get this from AWS, it's generally going to be where your devnet is
+SGIDs = ['sg-0b1b6d486a78331df','sg-00a6f910164e234e8','sg-0b93885731314abdd'] #Get these from an existing masternode
 
 collat_addresses = []
 voting_addresses = []
@@ -174,8 +173,6 @@ if args.run or args == []:
         bls_secret_addresses = lists[3]
         bls_public_addresses = lists[4]
         coll_txids = lists[5]
-        pdb.set_trace()
-
 
 
     #Launch the machine(s) - some of this needs to be dynamic eventually.
@@ -207,6 +204,8 @@ if args.run or args == []:
     for i in response:
         ip_addresses.append(i.public_ip_address)
         instance_ids.append(i.instance_id)
+    print("Sleeping while instances come up...")
+    time.sleep(120)
 
     # #protx register_prepare collateralHash collateralIndex ipAndPort ownerKeyAddr operatorPubKey votingKeyAddr operatorReward payoutAddress (feeSourceAddress)
 
@@ -237,13 +236,16 @@ if args.run or args == []:
         final_txids.append(stdout.readlines()[0].strip())
 
         #Okay this is hacky even for me...
-        sshn.connect(ip_addresses[i], username='ubuntu', key_filename=key_location)
-        stdinn, stdoutn, stderrn = sshn.exec_command('sudo sed -i "s/masternodeblsprivkey=.*/masternodeblsprivkey='+bls_secret_addresses[i]+'/g" /dash/.dashcore/dash.conf')
-        stdinn.close()
-        stdinn, stdoutn, stderrn = sshn.exec_command('sudo docker restart dashd')
-        stdinn.close()
-        sshn.close()
-        print("Replaced blskey of node {}"+str(i))
+        try:
+            sshn.connect(ip_addresses[i], username='ubuntu', key_filename=key_location, banner_timeout=200)
+            stdinn, stdoutn, stderrn = sshn.exec_command('sudo sed -i "s/masternodeblsprivkey=.*/masternodeblsprivkey='+bls_secret_addresses[i]+'/g" /dash/.dashcore/dash.conf')
+            stdinn.close()
+            stdinn, stdoutn, stderrn = sshn.exec_command('sudo docker restart dashd')
+            stdinn.close()
+            sshn.close()
+            print("Replaced blskey of node {}"+str(i))
+        except:
+            print("Something went wrong connecting to node {}"+str(i))
     #Delete prep log
     if os.path.exists("prep.log"):
         os.remove("prep.log")
