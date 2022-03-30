@@ -1,6 +1,20 @@
 import paramiko
 import time
 import boto3
+import argparse
+import sys
+import pdb
+import os.path
+
+parser = argparse.ArgumentParser()
+parser.add_argument('--prep','-p', help='prepare protx/collaterals but do not bring up the nodes', action='store_true')
+parser.add_argument('--run','-r', help='finish previously prepped setup', action='store_true')
+args = parser.parse_args()
+
+#Don't ask...
+def arithmetic_progression(n, x):
+  return list(range(n, x + 1, n))
+
 # SIMPLY A PROOF OF CONCEPT
 
 #This script assumes you already have a network running...
@@ -42,164 +56,204 @@ ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
 dynamodb = boto3.resource('dynamodb', region_name='us-west-2')
 table = dynamodb.Table(devnet)
 
-#Generate addresses for each node
-for i in range(nodes):
-    #connect to get new address
+if args.prep or args == []:
+    #Generate addresses for each node
+    for i in range(nodes):
+        #connect to get new address
+        ssh.connect(dashd_protx_server, username='ubuntu', key_filename=key_location)
+        stdin, stdout, stderr = ssh.exec_command('sudo -i dash-cli getnewaddress')
+        stdin.close()
+
+        #set address
+        #new_dash_address = stdout.readlines()[0].strip()
+        collat_addresses.append(stdout.readlines()[0].strip())
+        print(collat_addresses[i])
+
+        #Put the collateral address into SQS for the nodes to retreive later
+        msg_body='{}'.format(collat_addresses[i])
+        msg_attributes={ 'address': {'DataType': 'String','StringValue': 'address{}'.format(i)}}
+        response = sqs_client.send_message(QueueUrl='https://sqs.us-west-2.amazonaws.com/854439639386/vanaheim.fifo',MessageAttributes=msg_attributes,MessageBody=msg_body,MessageGroupId="main8"+str(i),MessageDeduplicationId="main8"+str(i))
+        print("DEBUG: Sent message")
+
+        #do it again for a second address
+        stdin, stdout, stderr = ssh.exec_command('sudo -i dash-cli getnewaddress')
+        stdin.close()
+
+        #set address
+        #voting_address = stdout.readlines()[0].strip()
+        voting_addresses.append(stdout.readlines()[0].strip())
+        print(voting_addresses[i])
+
+        #do it again for a third address
+        stdin, stdout, stderr = ssh.exec_command('sudo -i dash-cli getnewaddress')
+        stdin.close()
+
+        #set address
+        payout_addresses.append(stdout.readlines()[0].strip())
+        print(payout_addresses[i])
+
+        #blskey
+
+        stdin, stdout, stderr = ssh.exec_command('sudo -i dash-cli bls generate')
+        stdin.close()
+        blskey = stdout.readlines()
+        ssh.close()
+        #print(blskey)
+
+        #Do some format fixing... (hacky)
+        blssecret = blskey[1].strip()[11:-2]
+        bls_secret_addresses.append(blssecret)
+        print(bls_secret_addresses[i])
+
+        blspubkey = blskey[2].strip()[11:-1]
+        bls_public_addresses.append(blspubkey)
+        print(bls_public_addresses[i])
+
+        #connect to dashd-wallet-1 to get 1000 shiny tdash
+        ssh.connect(dashd_premine_server, username='ubuntu', key_filename=key_location)
+        stdin, stdout, stderr = ssh.exec_command('sudo -i dash-cli sendtoaddress {} 1000'.format(collat_addresses[i]))
+        stdin.close()
+
+        #We'll need this for protx later + wait for next block
+        coll_txids.append(stdout.readlines()[0].strip())
+
+        stdin, stdout, stderr = ssh.exec_command('sudo -i dash-cli sendtoaddress {} 1'.format(payout_addresses[i]))
+        stdin.close()
+
+        respose = table.put_item(
+            Item={
+                'address': collat_addresses[i],
+                'blspublic': bls_public_addresses[i],
+                'blssecret': bls_secret_addresses[i],
+                'txid': coll_txids[i]
+            }
+        )
+
+    with open('prep.log', 'w') as file:
+        for i in range(len(collat_addresses)):
+            file.write("%s\n" % collat_addresses[i])
+            file.write("%s\n" % voting_addresses[i])
+            file.write("%s\n" % payout_addresses[i])
+            file.write("%s\n" % bls_secret_addresses[i])
+            file.write("%s\n" % bls_public_addresses[i])
+            file.write("%s\n" % coll_txids[i])
+    if args.prep:
+        sys.exit()
+    else:
+        #Now we have all addresses and collaterals filled.. we must wait for a block
+
+        ssh.connect(dashd_premine_server, username='ubuntu', key_filename=key_location)
+        stdin, stdout, stderr = ssh.exec_command('sudo -i dash-cli getblockcount')
+        stdin.close()
+
+        block_count = stdout.readlines()[0].strip()
+        ssh.close()
+        print("Current block count: "+block_count)
+        new_block_count = block_count
+
+        while block_count == new_block_count:
+            ssh.connect(dashd_premine_server, username='ubuntu', key_filename=key_location)
+            stdin, stdout, stderr = ssh.exec_command('sudo -i dash-cli getblockcount')
+            stdin.close()
+
+            new_block_count = stdout.readlines()[0].strip()
+            if new_block_count == block_count:
+                print("Still "+new_block_count+": sleeping")
+                time.sleep(30)
+
+if args.run or args == []:
+
+    #If it's empty, it means we still need to load them in from the prep file...
+    if collat_addresses == []:
+        #Check prep file exists...
+        if not os.path.isfile('prep.log'):
+            sys.exit("You sent run but no prep log exists!")
+        
+        toload = int(sum(1 for line in open('prep.log'))/6)
+        prepfile = open('prep.log', 'r')        
+        
+        #'Borrowed' code from a Python God.
+        groups = 6
+        lists = [[] for _ in range(groups)]
+        for i, line in enumerate(prepfile.readlines()):
+            lists[i % groups].append(line.strip())
+        
+        #Restore the originally prepped stuff
+        collat_addresses = lists[0]
+        voting_addresses = lists[1]
+        payout_addresses = lists[2]
+        bls_secret_addresses = lists[3]
+        bls_public_addresses = lists[4]
+        coll_txids = lists[5]
+        pdb.set_trace()
+
+
+
+    #Launch the machine(s) - some of this needs to be dynamic eventually.
+    tag_purpose_devnet = {"Key": "devnet", "Value": devnet}
+    ec2 = boto3.resource('ec2', region_name='us-west-2')
+    response = ec2.create_instances(
+        ImageId=image_id,
+        InstanceType='t3.medium',
+        MaxCount=nodes,
+        MinCount=nodes,
+        KeyName='dn-devnet-{}-auth'.format(devnet),
+        Monitoring={
+            'Enabled': False
+        },
+        SecurityGroupIds=SGIDs,
+        IamInstanceProfile={
+            'Name': '{}-masternode'.format(devnet)
+        },
+        UserData=open("init.sh").read(),
+        SubnetId=subnet_id,
+        TagSpecifications=[{'ResourceType': 'instance',
+                                'Tags': [tag_purpose_devnet]}])
+
+    #Wait until last one is running...
+    response[-1].wait_until_running()
+
+    #reload all
+    for r in response:
+        r.reload()
+
+    for i in response:
+        ip_addresses.append(i.public_ip_address)
+        instance_ids.append(i.instance_id)
+
+    # #protx register_prepare collateralHash collateralIndex ipAndPort ownerKeyAddr operatorPubKey votingKeyAddr operatorReward payoutAddress (feeSourceAddress)
+
+    #Connect back to dash-wallet-2 to prepare protx
     ssh.connect(dashd_protx_server, username='ubuntu', key_filename=key_location)
-    stdin, stdout, stderr = ssh.exec_command('sudo -i dash-cli getnewaddress')
-    stdin.close()
+    for i in range(nodes):
+        protx_command = 'sudo -i dash-cli protx register_prepare {} 1 {}:20001 {} {} {} 0 {}'.format(coll_txids[i], ip_addresses[i], voting_addresses[i], bls_public_addresses[i], voting_addresses[i], payout_addresses[i])
+        print("DEBUG: "+protx_command)
 
-    #set address
-    #new_dash_address = stdout.readlines()[0].strip()
-    collat_addresses.append(stdout.readlines()[0].strip())
-    print(collat_addresses[i])
+        stdin, stdout, stderr = ssh.exec_command(protx_command)
+        stdin.close()
+        protx_output = stdout.readlines()
 
-    #Put the collateral address into SQS for the nodes to retreive later
-    msg_body='{}'.format(collat_addresses[i])
-    msg_attributes={ 'address': {'DataType': 'String','StringValue': 'address{}'.format(i)}}
-    response = sqs_client.send_message(QueueUrl='https://sqs.us-west-2.amazonaws.com/854439639386/vanaheim.fifo',MessageAttributes=msg_attributes,MessageBody=msg_body,MessageGroupId="main8"+str(i),MessageDeduplicationId="main8"+str(i))
-    print("DEBUG: Sent message")
+        #Really hacky way of getting what we want from the CLI/json because it comes to us weirdly through SSH (but it works!)
+        tx = protx_output[1][9:-3]
+        signthismessage = protx_output[3][17:-1]
 
-    #do it again for a second address
-    stdin, stdout, stderr = ssh.exec_command('sudo -i dash-cli getnewaddress')
-    stdin.close()
+        stdin, stdout, stderr = ssh.exec_command('sudo -i dash-cli signmessage {} {}'.format(collat_addresses[i], signthismessage))
+        stdin.close()
 
-    #set address
-    #voting_address = stdout.readlines()[0].strip()
-    voting_addresses.append(stdout.readlines()[0].strip())
-    print(voting_addresses[i])
+        signed_output = stdout.readlines()[0].strip()
+        print(signed_output)
 
-    #do it again for a third address
-    stdin, stdout, stderr = ssh.exec_command('sudo -i dash-cli getnewaddress')
-    stdin.close()
+        #one last hurrah!
+        stdin, stdout, stderr = ssh.exec_command('sudo -i dash-cli protx register_submit {} {}'.format(tx, signed_output))
+        stdin.close()
 
-    #set address
-    payout_addresses.append(stdout.readlines()[0].strip())
-    print(payout_addresses[i])
+        final_txids.append(stdout.readlines()[0].strip())
 
-    #blskey
-
-    stdin, stdout, stderr = ssh.exec_command('sudo -i dash-cli bls generate')
-    stdin.close()
-    blskey = stdout.readlines()
-    ssh.close()
-    #print(blskey)
-
-    #Do some format fixing... (hacky)
-    blssecret = blskey[1].strip()[11:-2]
-    bls_secret_addresses.append(blssecret)
-    print(bls_secret_addresses[i])
-
-    blspubkey = blskey[2].strip()[11:-1]
-    bls_public_addresses.append(blspubkey)
-    print(bls_public_addresses[i])
-
-    #connect to dashd-wallet-1 to get 1000 shiny tdash
-    ssh.connect(dashd_premine_server, username='ubuntu', key_filename=key_location)
-    stdin, stdout, stderr = ssh.exec_command('sudo -i dash-cli sendtoaddress {} 1000'.format(collat_addresses[i]))
-    stdin.close()
-
-    #We'll need this for protx later + wait for next block
-    coll_txids.append(stdout.readlines()[0].strip())
-
-    stdin, stdout, stderr = ssh.exec_command('sudo -i dash-cli sendtoaddress {} 1'.format(payout_addresses[i]))
-    stdin.close()
-
-    respose = table.put_item(
-        Item={
-            'address': collat_addresses[i],
-            'blspublic': bls_public_addresses[i],
-            'blssecret': bls_secret_addresses[i],
-            'txid': coll_txids[i]
-        }
-    )
-
-#Now we have all addresses and collaterals filled.. we must wait for a block
-
-ssh.connect(dashd_premine_server, username='ubuntu', key_filename=key_location)
-stdin, stdout, stderr = ssh.exec_command('sudo -i dash-cli getblockcount')
-stdin.close()
-
-block_count = stdout.readlines()[0].strip()
-ssh.close()
-print("Current block count: "+block_count)
-new_block_count = block_count
-
-while block_count == new_block_count:
-    ssh.connect(dashd_premine_server, username='ubuntu', key_filename=key_location)
-    stdin, stdout, stderr = ssh.exec_command('sudo -i dash-cli getblockcount')
-    stdin.close()
-
-    new_block_count = stdout.readlines()[0].strip()
-    if new_block_count == block_count:
-        print("Still "+new_block_count+": sleeping")
-        time.sleep(30)
-
-#Launch the machine(s) - some of this needs to be dynamic eventually.
-tag_purpose_devnet = {"Key": "devnet", "Value": devnet}
-ec2 = boto3.resource('ec2', region_name='us-west-2')
-response = ec2.create_instances(
-    ImageId=image_id,
-    InstanceType='t3.medium',
-    MaxCount=nodes,
-    MinCount=nodes,
-    KeyName='dn-devnet-{}-auth'.format(devnet),
-    Monitoring={
-        'Enabled': False
-    },
-    SecurityGroupIds=SGIDs,
-    IamInstanceProfile={
-        'Name': '{}-masternode'.format(devnet)
-    },
-    UserData=open("init.sh").read(),
-    SubnetId=subnet_id,
-    TagSpecifications=[{'ResourceType': 'instance',
-                            'Tags': [tag_purpose_devnet]}])
-
-#Wait until last one is running...
-response[-1].wait_until_running()
-
-#reload all
-for r in response:
-    r.reload()
-
-for i in response:
-    ip_addresses.append(i.public_ip_address)
-    instance_ids.append(i.instance_id)
-
-# #protx register_prepare collateralHash collateralIndex ipAndPort ownerKeyAddr operatorPubKey votingKeyAddr operatorReward payoutAddress (feeSourceAddress)
-
-#Connect back to dash-wallet-2 to prepare protx
-ssh.connect(dashd_protx_server, username='ubuntu', key_filename=key_location)
-for i in range(nodes):
-    protx_command = 'sudo -i dash-cli protx register_prepare {} 1 {}:20001 {} {} {} 0 {}'.format(coll_txids[i], ip_addresses[i], voting_addresses[i], bls_public_addresses[i], voting_addresses[i], payout_addresses[i])
-    print("DEBUG: "+protx_command)
-
-    stdin, stdout, stderr = ssh.exec_command(protx_command)
-    stdin.close()
-    protx_output = stdout.readlines()
-
-    #Really hacky way of getting what we want from the CLI/json because it comes to us weirdly through SSH (but it works!)
-    tx = protx_output[1][9:-3]
-    signthismessage = protx_output[3][17:-1]
-
-    stdin, stdout, stderr = ssh.exec_command('sudo -i dash-cli signmessage {} {}'.format(collat_addresses[i], signthismessage))
-    stdin.close()
-
-    signed_output = stdout.readlines()[0].strip()
-    print(signed_output)
-
-    #one last hurrah!
-    stdin, stdout, stderr = ssh.exec_command('sudo -i dash-cli protx register_submit {} {}'.format(tx, signed_output))
-    stdin.close()
-
-    final_txids.append(stdout.readlines()[0].strip())
-
-#Write the important stuff once complete....
-with open('debug.log', 'a') as file:
-    for i in ip_addresses:
-        file.write("%s\n" % i)
-    for i in final_txids:
-        file.write("%s\n" % i)
-    for i in instance_ids:
-        file.write("%s\n" % i)
+    #Write the important stuff once complete....
+    with open('debug.log', 'a') as file:
+        for i in ip_addresses:
+            file.write("%s\n" % i)
+        for i in final_txids:
+            file.write("%s\n" % i)
+        for i in instance_ids:
+            file.write("%s\n" % i)
