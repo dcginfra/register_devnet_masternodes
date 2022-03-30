@@ -7,10 +7,9 @@ sudo ./aws/install
 apt install -y jq
 
 #Get our address
-TAG_NAME="address"
 INSTANCE_ID="`wget -qO- http://169.254.169.254/latest/meta-data/instance-id`"
+TAG_VALUE=$(aws sqs receive-message --queue-url https://sqs.us-west-2.amazonaws.com/854439639386/vanaheim.fifo | jq -r '.[] | .[] | .Body')
 REGION='us-west-2'
-TAG_VALUE="`aws ec2 describe-tags --filters "Name=resource-id,Values=$INSTANCE_ID" "Name=key,Values=$TAG_NAME" --region $REGION --output=text | cut -f5`"
 DEVNET="`aws ec2 describe-tags --filters "Name=resource-id,Values=$INSTANCE_ID" "Name=key,Values=devnet" --region $REGION --output=text | cut -f5`"
 
 #Get the BLSKEY for this node
