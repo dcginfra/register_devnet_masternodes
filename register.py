@@ -25,7 +25,7 @@ devnet = 'malort'
 key_location = '/home/monotoko/.ssh/evo-app-deploy.rsa' #give full path, doesn't work with ~
 dashd_protx_server = '54.148.235.29' #also called dashd-wallet-2
 dashd_premine_server = '54.186.71.19' #also called dashd-wallet-1
-nodes = 600 #how many masternodes need setting up
+nodes = 549 #how many masternodes need setting up
 startkey = 0 #Set up to last deployment, for example if you've already deployed 5 using this script set this to 5.
 subnet_id = 'subnet-03a1d16d171df3219' #Get this from AWS, it's generally going to be where your devnet is
 SGIDs = ['sg-0b1b6d486a78331df','sg-00a6f910164e234e8','sg-0b93885731314abdd'] #Get these from an existing masternode
@@ -189,7 +189,7 @@ if args.run or args == []:
         },
         SecurityGroupIds=SGIDs,
         IamInstanceProfile={
-            'Name': '{}-masternode'.format(devnet)
+            'Name': 'vanaheim-masternode'
         },
         UserData=open("init.sh").read(),
         SubnetId=subnet_id,
@@ -198,8 +198,14 @@ if args.run or args == []:
 
     #reload all
     for r in response:
-        r.wait_until_running()
-        r.reload()
+        try:
+            r.wait_until_running()
+            r.reload()
+        except:
+            print("Sleeping - hit rate limit")
+            time.sleep(120)
+            r.wait_until_running()
+            r.reload()
 
     for i in response:
         ip_addresses.append(i.public_ip_address)
