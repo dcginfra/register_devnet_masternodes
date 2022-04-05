@@ -20,15 +20,15 @@ args = parser.parse_args()
 #Step 4: Ensure you have an IAM role for dashdev on AWS under 'default' in ~/.aws/credentials
 #Step 5: Ensure an IAM role exists called devnet-masternode (eg malort-masternode) with read/write to dynamo, read access to EC2 (at least itself) and read access to SQS
 
-image_id = 'ami-0b7fc1b9847b6632e' #an existing image from a masternode on the network
+image_id = 'ami-00e18683a1cc2c84a' #an existing image from a masternode on the network
 devnet = 'malort'
 key_location = '/home/monotoko/.ssh/evo-app-deploy.rsa' #give full path, doesn't work with ~
-dashd_protx_server = '54.148.235.29' #also called dashd-wallet-2
-dashd_premine_server = '54.186.71.19' #also called dashd-wallet-1
-nodes = 549 #how many masternodes need setting up
+dashd_protx_server = '52.34.110.181' #also called dashd-wallet-2
+dashd_premine_server = '54.200.129.163' #also called dashd-wallet-1
+nodes = 550 #how many masternodes need setting up
 startkey = 0 #Set up to last deployment, for example if you've already deployed 5 using this script set this to 5.
-subnet_id = 'subnet-03a1d16d171df3219' #Get this from AWS, it's generally going to be where your devnet is
-SGIDs = ['sg-0b1b6d486a78331df','sg-00a6f910164e234e8','sg-0b93885731314abdd'] #Get these from an existing masternode
+subnet_id = 'subnet-0ec63199e0d0598be' #Get this from AWS, it's generally going to be where your devnet is
+SGIDs = ['sg-03a09b1c637e5704e','sg-018ea1cb5337e62e4','sg-09e36748bf4b01607'] #Get these from an existing masternode
 
 collat_addresses = []
 voting_addresses = []
@@ -254,8 +254,8 @@ if args.run or args == []:
         else:
             print("Replaced blskey of node {}".format(i))
     #Delete prep log
-    if os.path.exists("prep.log"):
-        os.remove("prep.log")
+    #if os.path.exists("prep.log"):
+    #    os.remove("prep.log")
     #Write the important stuff once complete....
     with open('debug.log', 'a') as file:
         for i in ip_addresses:
